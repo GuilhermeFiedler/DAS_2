@@ -23,8 +23,63 @@ As principais dificuldades identificadas são:
 | **Performance da equipe** | Métricas como **MTTR (Tempo Médio de Resolução)** e **MTTA (Tempo Médio de Resposta)** por analista não são monitoradas de forma sistemática. |
 | **Satisfação do cliente** | O **CSAT** coletado no JSM não é cruzado com tipo de chamado, cliente ou analista, dificultando identificar onde a satisfação está abaixo do esperado. |
 
+---
+
+# Solução
+
+A solução é um pipeline **EL (Extract & Load)** rodando em **Azure Functions** (Python), que copia periodicamente as tabelas do schema `itsm` de um banco de origem para um Azure SQL analítico, o qual alimenta o Power BI usado por Patrícia e pela liderança de TI.
+
+```
+src/
+├── function_app.py
+├── core/
+│   ├── connection.py         # criação das conexões ODBC (origem e destino)
+│   └── base_extractor.py     # classe base do processo EL
+└── triggers/
+    ├── extract_orchestrator.py   # timer trigger; dispara a pipeline a cada 5 min
+    ├── extract_fila.py
+    ├── extract_categoria.py
+    ├── extract_sla.py
+    ├── extract_cliente_organizacao.py
+    ├── extract_analista.py
+    ├── extract_solicitante.py
+    ├── extract_chamado.py
+    ├── extract_chamado_sla.py
+    ├── extract_chamado_status_historico.py
+    └── extract_csat_avaliacao.py
+```
+
+## Arquitetura do pipeline EL — padrão Template Method
+
+Cada uma das dez tabelas segue exatamente a mesma sequência de passos: extrair da origem, verificar se há linhas, montar um `MERGE`, carregar no destino em lote e tratar erro. O que muda de uma tabela para outra é só o nome da tabela, a lista de colunas e a chave primária.
+
+Para evitar repetir essa sequência dez vezes, o processo foi modelado com o padrão de projeto **Template Method** (GoF, comportamental): a classe `core.base_extractor.BaseExtractor` define o algoritmo completo no método `run()`, e cada arquivo em `triggers/extract_*.py` é uma subclasse que só declara `TABLE`, `PRIMARY_KEY` e `COLUMNS`.
+
+```
+BaseExtractor.run()
+  ├─ extract()            extrai da origem
+  ├─ transform(rows)       ponto de extensão (hook)
+  └─ load(rows)            grava no destino via MERGE, em lote
+```
+
+O orquestrador (`extract_orchestrator.py`) chama as subclasses em quatro níveis, respeitando as dependências de chave estrangeira entre as tabelas.
+
+## Variáveis de ambiente
+
+A conexão com os bancos de origem e destino é configurada via variáveis de ambiente (`local.settings.json` local, ou Application Settings na Function App no Azure):
+
+| Variável | Descrição |
+|---|---|
+| `SQL_SERVER_SOURCE` / `SQL_DATABASE_SOURCE` / `SQL_USER_SOURCE` / `SQL_PASSWORD_SOURCE` | Banco de origem (réplica do JSM) |
+| `SQL_SERVER_TARGET` / `SQL_DATABASE_TARGET` / `SQL_USER_TARGET` / `SQL_PASSWORD_TARGET` | Banco de destino (Azure SQL analítico, consumido pelo Power BI) |
+
+## Adicionando uma nova tabela
+
+1. Criar `src/triggers/extract_<tabela>.py` com uma subclasse de `BaseExtractor` declarando `TABLE`, `PRIMARY_KEY` e `COLUMNS`.
+2. Registrar a classe no nível correto de `PIPELINE`, em `extract_orchestrator.py`, respeitando a ordem de dependência de FK.
 
 ---
+
 # Dashboard
 
 ![Dashboard-Chamados](Dashboard/print1dashboard.png)
