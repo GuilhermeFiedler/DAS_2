@@ -1,43 +1,52 @@
 import logging
+
 import azure.functions as func
 
-from triggers import (
-    extract_fila,
-    extract_categoria,
-    extract_sla,
-    extract_cliente_organizacao,
-    extract_analista,
-    extract_solicitante,
-    extract_chamado,
-    extract_chamado_sla,
-    extract_chamado_status_historico,
-    extract_csat_avaliacao,
-)
+from core.base_extractor import BaseExtractor
+from triggers.extract_analista import AnalistaExtractor
+from triggers.extract_categoria import CategoriaExtractor
+from triggers.extract_chamado import ChamadoExtractor
+from triggers.extract_chamado_sla import ChamadoSlaExtractor
+from triggers.extract_chamado_status_historico import ChamadoStatusHistoricoExtractor
+from triggers.extract_cliente_organizacao import ClienteOrganizacaoExtractor
+from triggers.extract_csat_avaliacao import CsatAvaliacaoExtractor
+from triggers.extract_fila import FilaExtractor
+from triggers.extract_sla import SlaExtractor
+from triggers.extract_solicitante import SolicitanteExtractor
 
 app = func.Blueprint()
 
+PIPELINE: list[tuple[str, list[type[BaseExtractor]]]] = [
+    ("Nível 1", [
+        FilaExtractor,
+        CategoriaExtractor,
+        SlaExtractor,
+        ClienteOrganizacaoExtractor,
+    ]),
+    ("Nível 2", [
+        AnalistaExtractor,
+        SolicitanteExtractor,
+    ]),
+    ("Nível 3", [
+        ChamadoExtractor,
+    ]),
+    ("Nível 4", [
+        ChamadoSlaExtractor,
+        ChamadoStatusHistoricoExtractor,
+        CsatAvaliacaoExtractor,
+    ]),
+]
 
-@app.timer_trigger(schedule="0 */5 * * * *", arg_name="myTimer", run_on_startup=False,
-                   use_monitor=False)
+
+@app.timer_trigger(schedule="0 */5 * * * *", arg_name="myTimer",
+                   run_on_startup=False, use_monitor=False)
 def extract_all(myTimer: func.TimerRequest) -> None:
     logging.info("Iniciando pipeline EL")
+    total = 0
 
-    # Nível 1 — sem dependências de FK
-    extract_fila.run()
-    extract_categoria.run()
-    extract_sla.run()
-    extract_cliente_organizacao.run()
+    for nivel, extractors in PIPELINE:
+        logging.info(nivel)
+        for extractor_cls in extractors:
+            total += extractor_cls().run()
 
-    # Nível 2 — dependem de fila e cliente_organizacao
-    extract_analista.run()
-    extract_solicitante.run()
-
-    # Nível 3 — depende de fila, analista, solicitante, categoria, cliente_organizacao
-    extract_chamado.run()
-
-    # Nível 4 — dependem de chamado
-    extract_chamado_sla.run()
-    extract_chamado_status_historico.run()
-    extract_csat_avaliacao.run()
-
-    logging.info("Pipeline EL concluída")
+    logging.info("Pipeline EL concluída — %d linhas carregadas", total)
