@@ -79,8 +79,3 @@ A conexão com os bancos de origem e destino é configurada via variáveis de am
 2. Registrar a classe no nível correto de `PIPELINE`, em `extract_orchestrator.py`, respeitando a ordem de dependência de FK.
 
 ---
-
-# Dashboard
-
-![Dashboard-Chamados](Dashboard/print1dashboard.png)
-![Dashboard-CSAT](Dashboard/print2dashboard.png)
