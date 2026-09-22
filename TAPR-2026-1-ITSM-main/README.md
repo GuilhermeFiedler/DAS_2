@@ -1,6 +1,6 @@
-# TAPR-2026-1-ITSM
+# Design II -2026-2-ITSM
 
-+ Integrantes: Guilherme T. Fiedler, Clara M. Martinovsky e Mario S.M. Junior
++ Integrantes: Guilherme T. Fiedler, Clara M. Martinovsky
 
 A **CorpTech Soluções em TI Ltda.** é uma empresa de médio porte prestadora de serviços de TI gerenciados, com **85 colaboradores** e uma carteira de **40 clientes corporativos ativos**.
 A equipe interna de **service desk** conta com **12 analistas**, distribuídos em dois níveis de suporte (**N1 e N2**), responsáveis por atender um volume médio de **1.400 chamados por mês**.
