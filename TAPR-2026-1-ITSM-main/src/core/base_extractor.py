@@ -4,7 +4,8 @@ import logging
 from abc import ABC
 from typing import Any, Iterable, Sequence
 
-from core.connection import source_connection, target_connection
+from core.connection import target_connection
+from core.extraction_strategy import CargaCompleta, ExtractionStrategy
 
 
 class BaseExtractor(ABC):
@@ -18,6 +19,8 @@ class BaseExtractor(ABC):
     IDENTITY_INSERT: bool = True
 
     BATCH_SIZE: int = 1000
+
+    ESTRATEGIA: ExtractionStrategy = CargaCompleta()
 
     def __init__(self) -> None:
         if not self.TABLE or not self.PRIMARY_KEY or not self.COLUMNS:
@@ -61,10 +64,7 @@ class BaseExtractor(ABC):
         return f"SELECT {', '.join(self.COLUMNS)} FROM {self.full_table}"
 
     def extract(self) -> list[tuple]:
-        with source_connection() as src:
-            cursor = src.cursor()
-            cursor.execute(self.build_select_sql())
-            return [tuple(row) for row in cursor.fetchall()]
+        return self.ESTRATEGIA.extract(self)
 
     def transform(self, rows: list[tuple]) -> Iterable[tuple]:
         return rows

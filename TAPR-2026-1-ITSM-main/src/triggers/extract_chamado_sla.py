@@ -1,9 +1,11 @@
 from core.base_extractor import BaseExtractor
+from core.extraction_strategy import CargaIncremental
 
 
 class ChamadoSlaExtractor(BaseExtractor):
     TABLE = "chamado_sla"
     PRIMARY_KEY = "id_chamado_sla"
+    ESTRATEGIA = CargaIncremental()
     COLUMNS = (
         "id_chamado_sla", "id_chamado", "id_sla", "fl_breach",
         "qt_tempo_restante_minutos", "qt_tempo_decorrido_minutos",

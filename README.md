@@ -78,4 +78,43 @@ A conexão com os bancos de origem e destino é configurada via variáveis de am
 1. Criar `src/triggers/extract_<tabela>.py` com uma subclasse de `BaseExtractor` declarando `TABLE`, `PRIMARY_KEY` e `COLUMNS`.
 2. Registrar a classe no nível correto de `PIPELINE`, em `extract_orchestrator.py`, respeitando a ordem de dependência de FK.
 
+## Estratégia de extração — padrão Strategy
+
+> Branch `feature/strategy-extracao`
+
+O pipeline roda a cada 5 minutos e, até aqui, sempre relia a tabela de origem inteira em toda execução (`SELECT * FROM tabela`). Para as tabelas de domínio (`fila`, `categoria`, `sla`...) isso é barato, mas para as tabelas de fato — que só crescem — significa reler o histórico completo centenas de vezes por dia.
+
+Essa branch aplica o padrão de projeto **Strategy** (GoF, comportamental) para separar **como** os dados são extraídos do restante do algoritmo EL, que continua fixo pelo Template Method. A escolha da estratégia passa a ser uma propriedade de cada extrator, não mais uma decisão embutida em `BaseExtractor.extract()`.
+
+```
+src/core/extraction_strategy.py
+├── ExtractionStrategy      (interface)
+├── CargaCompleta           relê a tabela inteira — usada por padrão
+└── CargaIncremental        lê só o que mudou desde o último MAX(dt_atualizacao) no destino
+```
+
+`BaseExtractor` passa a delegar o passo `extract()` para a estratégia configurada:
+
+```python
+class BaseExtractor(ABC):
+    ESTRATEGIA: ExtractionStrategy = CargaCompleta()
+
+    def extract(self) -> list[tuple]:
+        return self.ESTRATEGIA.extract(self)
+```
+
+Cada subclasse escolhe sua estratégia sobrescrevendo `ESTRATEGIA`. As tabelas de domínio (pequenas, quase estáticas) mantêm o padrão `CargaCompleta`; as tabelas de fato passam a usar `CargaIncremental`:
+
+| Extrator | Estratégia | Motivo |
+|---|---|---|
+| `FilaExtractor`, `CategoriaExtractor`, `SlaExtractor`, `ClienteOrganizacaoExtractor`, `AnalistaExtractor`, `SolicitanteExtractor` | `CargaCompleta` (padrão herdado) | Tabelas de domínio, pequenas e quase estáticas |
+| `ChamadoExtractor` | `CargaIncremental()` | Tabela de fato principal, cresce continuamente |
+| `ChamadoSlaExtractor` | `CargaIncremental()` | Depende de `chamado`, mesmo padrão de crescimento |
+| `ChamadoStatusHistoricoExtractor` | `CargaIncremental()` | Histórico só cresce — nunca é reescrito |
+| `CsatAvaliacaoExtractor` | `CargaIncremental()` | Avaliação é criada uma vez, nunca relida |
+
+`CargaIncremental` calcula a marca d'água (*watermark*) automaticamente, consultando `MAX(dt_atualizacao)` já carregado no destino — nenhuma tabela de controle adicional é necessária.
+
+Template Method e Strategy convivem sem conflito: o primeiro fixa a ordem dos passos do processo EL (`extract → transform → load`); o segundo troca o conteúdo de um desses passos, por tabela.
+
 ---
